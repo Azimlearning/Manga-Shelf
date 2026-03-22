@@ -27,7 +27,7 @@ export interface MangaDetail extends MangaResult {
 }
 
 export interface Source {
-  id: string; // 'mangadex' | 'bato'
+  id: string;
   name: string;
   language: string;
   search: (query: string, page: number) => Promise<MangaResult[]>;
@@ -35,4 +35,5 @@ export interface Source {
   getDetail: (id: string) => Promise<MangaDetail>;
   getChapters: (mangaId: string) => Promise<Chapter[]>;
   getPages: (chapterId: string) => Promise<string[]>;
+  healthCheck?: () => Promise<boolean>;
 }

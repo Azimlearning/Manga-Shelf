@@ -1,16 +1,10 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useQuery } from "@tanstack/react-query";
 import SearchBar from "@/components/SearchBar";
-import { sources, disabledSources, getSource } from "@/lib/sources";
-import type { MangaResult } from "@/lib/types";
-import { motion, AnimatePresence } from "framer-motion";
+import { allSources, getSource } from "@/lib/sources";
+import type { MangaResult, Source } from "@/lib/types";
+import { motion } from "framer-motion";
 import { formatDistanceToNow } from "date-fns";
-import {
-  Tooltip,
-  TooltipContent,
-  TooltipProvider,
-  TooltipTrigger,
-} from "@/components/ui/tooltip";
 
 // ─── Source selector pill ─────────────────────────────────────────────────
 
@@ -18,24 +12,17 @@ function SourcePill({
   name,
   active,
   onClick,
-  disabled,
-  tooltip,
 }: {
   name: string;
   active: boolean;
   onClick: () => void;
-  disabled?: boolean;
-  tooltip?: string;
 }) {
-  const pill = (
+  return (
     <motion.button
-      onClick={disabled ? undefined : onClick}
-      whileTap={disabled ? undefined : { scale: 0.95 }}
-      disabled={disabled}
+      onClick={onClick}
+      whileTap={{ scale: 0.95 }}
       className={`relative rounded-full px-4 py-1.5 text-xs font-semibold transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-primary ${
-        disabled
-          ? "cursor-not-allowed bg-muted/50 text-muted-foreground/50 line-through"
-          : active
+        active
           ? "bg-primary text-primary-foreground shadow-sm"
           : "bg-secondary text-secondary-foreground hover:bg-secondary/80"
       }`}
@@ -43,19 +30,6 @@ function SourcePill({
       {name}
     </motion.button>
   );
-
-  if (disabled && tooltip) {
-    return (
-      <Tooltip>
-        <TooltipTrigger asChild>{pill}</TooltipTrigger>
-        <TooltipContent side="bottom">
-          <p className="text-xs">{tooltip}</p>
-        </TooltipContent>
-      </Tooltip>
-    );
-  }
-
-  return pill;
 }
 
 // ─── Manga grid item ─────────────────────────────────────────────────────
@@ -186,30 +160,77 @@ function LatestUpdatesSkeleton() {
   );
 }
 
+// ─── Health check hook ────────────────────────────────────────────────────
+
+function useHealthySources() {
+  const [healthySources, setHealthySources] = useState<Source[]>([]);
+  const [checking, setChecking] = useState(true);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    async function check() {
+      const results = await Promise.allSettled(
+        allSources.map(async (src) => {
+          if (!src.healthCheck) return { src, ok: true };
+          const ok = await src.healthCheck();
+          return { src, ok };
+        })
+      );
+
+      if (cancelled) return;
+
+      const healthy = results
+        .filter((r): r is PromiseFulfilledResult<{ src: Source; ok: boolean }> => r.status === "fulfilled" && r.value.ok)
+        .map((r) => r.value.src);
+
+      setHealthySources(healthy);
+      setChecking(false);
+    }
+
+    check();
+    return () => { cancelled = true; };
+  }, []);
+
+  return { healthySources, checking };
+}
+
 // ─── Browse page ──────────────────────────────────────────────────────────
 
 export default function BrowsePage() {
-  const [activeSourceId, setActiveSourceId] = useState<string>("mangadex");
+  const { healthySources, checking } = useHealthySources();
+  const showPills = healthySources.length > 1;
+
+  const [activeSourceId, setActiveSourceId] = useState<string | null>(null);
   const [query, setQuery] = useState("");
 
-  const source = getSource(activeSourceId);
+  // Auto-select first healthy source
+  useEffect(() => {
+    if (!checking && healthySources.length > 0 && !activeSourceId) {
+      setActiveSourceId(healthySources[0].id);
+    }
+  }, [checking, healthySources, activeSourceId]);
+
+  const source = activeSourceId ? (() => { try { return getSource(activeSourceId); } catch { return null; } })() : null;
 
   const { data: popular, isLoading: loadingPopular } = useQuery({
     queryKey: ["popular-manga", activeSourceId],
-    queryFn: () => source.getPopular(),
+    queryFn: () => source!.getPopular(),
+    enabled: !!source,
     staleTime: 5 * 60 * 1000,
     retry: 1,
   });
 
   const { data: searchResults, isLoading: loadingSearch } = useQuery({
     queryKey: ["search-manga", activeSourceId, query],
-    queryFn: () => source.search(query, 0),
-    enabled: query.length >= 2,
+    queryFn: () => source!.search(query, 0),
+    enabled: !!source && query.length >= 2,
     staleTime: 2 * 60 * 1000,
     retry: 1,
   });
 
   // Latest updates from MangaDex
+  const showLatest = activeSourceId === "mangadex" && query.length < 2;
   const { data: latestChapters, isLoading: loadingLatest } = useQuery({
     queryKey: ["latest-updates"],
     queryFn: async (): Promise<LatestChapter[]> => {
@@ -230,7 +251,6 @@ export default function BrowsePage() {
         const groupRel = c.relationships?.find((r: any) => r.type === "scanlation_group");
         const mangaId = mangaRel?.id ?? "";
 
-        // Extract cover from manga relationship
         const coverRel = mangaRel?.relationships?.find((r: any) => r.type === "cover_art");
         let coverUrl = "";
         if (coverRel?.attributes?.fileName) {
@@ -254,29 +274,29 @@ export default function BrowsePage() {
         };
       });
     },
+    enabled: showLatest,
     staleTime: 2 * 60 * 1000,
     retry: 1,
   });
 
   const manga: MangaResult[] = query.length >= 2 ? searchResults ?? [] : popular ?? [];
-  const loading = query.length >= 2 ? loadingSearch : loadingPopular;
-  const showLatest = activeSourceId === "mangadex" && query.length < 2;
+  const loading = checking || (query.length >= 2 ? loadingSearch : loadingPopular);
 
   return (
-    <TooltipProvider>
-      <div className="safe-bottom min-h-screen px-4 pt-4">
-        <header className="mb-4">
-          <h1 className="mb-3 text-xl font-bold text-foreground">Browse</h1>
-          <SearchBar onSearch={setQuery} autoFocus />
-        </header>
+    <div className="safe-bottom min-h-screen px-4 pt-4">
+      <header className="mb-4">
+        <h1 className="mb-3 text-xl font-bold text-foreground">Browse</h1>
+        <SearchBar onSearch={setQuery} autoFocus />
+      </header>
 
-        {/* Source selector pills */}
+      {/* Source selector pills — only if multiple sources are healthy */}
+      {showPills && (
         <div
           className="mb-3 flex items-center gap-2 overflow-x-auto pb-1 scrollbar-hide"
           role="tablist"
           aria-label="Select manga source"
         >
-          {sources.map((s) => (
+          {healthySources.map((s) => (
             <SourcePill
               key={s.id}
               name={s.name}
@@ -287,58 +307,48 @@ export default function BrowsePage() {
               }}
             />
           ))}
-          {disabledSources.map((ds) => (
-            <SourcePill
-              key={ds.id}
-              name={ds.name}
-              active={false}
-              onClick={() => {}}
-              disabled
-              tooltip={ds.reason}
-            />
+        </div>
+      )}
+
+      {/* Recently Updated — horizontal scroll */}
+      {showLatest && (
+        <section className="mb-5">
+          <p className="mb-2 text-xs font-medium uppercase tracking-wider text-muted-foreground">
+            Recently Updated
+          </p>
+          {loadingLatest ? (
+            <LatestUpdatesSkeleton />
+          ) : latestChapters && latestChapters.length > 0 ? (
+            <div className="flex gap-3 overflow-x-auto pb-2 scrollbar-hide">
+              {latestChapters.map((ch) => (
+                <LatestUpdateCard key={ch.chapterId} ch={ch} />
+              ))}
+            </div>
+          ) : null}
+        </section>
+      )}
+
+      {/* Section label */}
+      <div className="mb-2">
+        <p className="text-xs font-medium text-muted-foreground uppercase tracking-wider">
+          {query.length >= 2 ? `Results for "${query}"` : "Popular"}
+        </p>
+      </div>
+
+      {/* Grid */}
+      {loading ? (
+        <SkeletonGrid />
+      ) : manga.length === 0 && query.length >= 2 ? (
+        <div className="flex flex-col items-center justify-center py-20 text-muted-foreground">
+          <p className="text-sm">No results found</p>
+        </div>
+      ) : (
+        <div className="grid grid-cols-3 gap-3 sm:grid-cols-4 md:grid-cols-5 lg:grid-cols-6">
+          {manga.map((m) => (
+            <MangaGridItem key={m.id} manga={m} />
           ))}
         </div>
-
-        {/* Recently Updated — horizontal scroll */}
-        {showLatest && (
-          <section className="mb-5">
-            <p className="mb-2 text-xs font-medium uppercase tracking-wider text-muted-foreground">
-              Recently Updated
-            </p>
-            {loadingLatest ? (
-              <LatestUpdatesSkeleton />
-            ) : latestChapters && latestChapters.length > 0 ? (
-              <div className="flex gap-3 overflow-x-auto pb-2 scrollbar-hide">
-                {latestChapters.map((ch) => (
-                  <LatestUpdateCard key={ch.chapterId} ch={ch} />
-                ))}
-              </div>
-            ) : null}
-          </section>
-        )}
-
-        {/* Section label */}
-        <div className="mb-2">
-          <p className="text-xs font-medium text-muted-foreground uppercase tracking-wider">
-            {query.length >= 2 ? `Results for "${query}"` : "Popular"}
-          </p>
-        </div>
-
-        {/* Grid */}
-        {loading ? (
-          <SkeletonGrid />
-        ) : manga.length === 0 && query.length >= 2 ? (
-          <div className="flex flex-col items-center justify-center py-20 text-muted-foreground">
-            <p className="text-sm">No results found</p>
-          </div>
-        ) : (
-          <div className="grid grid-cols-3 gap-3 sm:grid-cols-4 md:grid-cols-5 lg:grid-cols-6">
-            {manga.map((m) => (
-              <MangaGridItem key={m.id} manga={m} />
-            ))}
-          </div>
-        )}
-      </div>
-    </TooltipProvider>
+      )}
+    </div>
   );
 }
