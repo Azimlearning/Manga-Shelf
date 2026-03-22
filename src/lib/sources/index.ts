@@ -1,6 +1,5 @@
 import type { Source, MangaResult, MangaDetail, Chapter } from "@/lib/types";
 import * as mangadex from "./mangadex";
-import * as bato from "./bato";
 import * as mangasee from "./mangasee";
 
 // ─── MangaDex source ──────────────────────────────────────────────────────
@@ -16,20 +15,7 @@ const mangadexSource: Source = {
   getPages: (chapterId: string): Promise<string[]> => mangadex.getChapterPages(chapterId),
 };
 
-// ─── Bato.to source ───────────────────────────────────────────────────────
-const batoSource: Source = {
-  id: "bato",
-  name: "Bato.to",
-  language: "en",
-  search: (query: string, page: number): Promise<MangaResult[]> =>
-    bato.searchManga(query, page),
-  getPopular: (): Promise<MangaResult[]> => bato.getPopular(),
-  getDetail: (id: string): Promise<MangaDetail> => bato.getMangaDetail(id),
-  getChapters: (mangaId: string): Promise<Chapter[]> => bato.getChapterList(mangaId),
-  getPages: (chapterId: string): Promise<string[]> => bato.getChapterPages(chapterId),
-};
-
-// ─── MangaSee source ──────────────────────────────────────────────────────
+// ─── MangaSee source (limited — blocked by most cloud hosts) ──────────────
 const mangaseeSource: Source = {
   id: "mangasee",
   name: "MangaSee",
@@ -42,8 +28,20 @@ const mangaseeSource: Source = {
   getPages: (chapterId: string): Promise<string[]> => mangasee.getChapterPages(chapterId),
 };
 
+// ─── Disabled / coming-soon sources (metadata only) ───────────────────────
+export interface DisabledSource {
+  id: string;
+  name: string;
+  reason: string;
+}
+
+export const disabledSources: DisabledSource[] = [
+  { id: "mangaplus", name: "MangaPlus", reason: "Coming soon" },
+  { id: "mangasee", name: "MangaSee (Limited)", reason: "Blocked by host — requires Cloudflare proxy" },
+];
+
 // ─── Registry ─────────────────────────────────────────────────────────────
-export const sources: Source[] = [mangadexSource, batoSource, mangaseeSource];
+export const sources: Source[] = [mangadexSource];
 
 export function getSource(id: string): Source {
   const src = sources.find((s) => s.id === id);

@@ -1,6 +1,9 @@
 import type { MangaResult, Chapter, MangaDetail } from "@/lib/types";
 
-// All requests go through /api/mangadex proxy (Vercel serverless function)
+// All requests go through /api/mangadex proxy (Vercel serverless function).
+// To switch to Cloudflare Worker proxy, replace /api/mangadex
+// with your worker URL: https://your-worker.workers.dev/proxy
+// Deploy CLOUDFLARE_WORKER.js at workers.cloudflare.com (free)
 const SOURCE_ID = "mangadex";
 
 // ─── Helpers ──────────────────────────────────────────────────────────────
