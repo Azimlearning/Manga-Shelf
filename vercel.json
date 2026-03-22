@@ -2,6 +2,8 @@
   "rewrites": [
     { "source": "/api/mangadex", "destination": "/api/mangadex" },
     { "source": "/api/proxy-image", "destination": "/api/proxy-image" },
+    { "source": "/api/bato", "destination": "/api/bato" },
+    { "source": "/api/mangasee/:path*", "destination": "/api/mangasee" },
     { "source": "/(.*)", "destination": "/index.html" }
   ]
 }
