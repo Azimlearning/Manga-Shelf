@@ -1,6 +1,6 @@
-import { useParams, useNavigate } from "react-router-dom";
+import { useParams, useNavigate, useSearchParams } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
-import { getChapterPages } from "@/lib/mangadex";
+import { getSource } from "@/lib/sources";
 import { useLibrary, useReadingSettings } from "@/hooks/use-library";
 import {
   ArrowLeft,
@@ -28,6 +28,9 @@ const BG_CLASSES: Record<string, string> = {
 export default function ReaderPage() {
   const { mangaId, chapterId } = useParams<{ mangaId: string; chapterId: string }>();
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
+  const sourceId = searchParams.get("src") || "mangadex";
+  const source = getSource(sourceId);
   const { markRead: mark, settings } = useReaderState(mangaId!, chapterId!);
   const [showUI, setShowUI] = useState(true);
   const [showSettings, setShowSettings] = useState(false);
@@ -41,8 +44,8 @@ export default function ReaderPage() {
   const [dlProgress, setDlProgress] = useState<{ done: number; total: number } | null>(null);
 
   const { data: remotePages, isLoading: loadingRemote } = useQuery({
-    queryKey: ["chapter-pages", chapterId],
-    queryFn: () => getChapterPages(chapterId!),
+    queryKey: ["chapter-pages", sourceId, chapterId],
+    queryFn: () => source.getPages(chapterId!),
     enabled: !!chapterId && !downloaded,
   });
 
@@ -114,7 +117,7 @@ export default function ReaderPage() {
           >
             <button
               id="reader-back-btn"
-              onClick={() => navigate(`/manga/${mangaId}`)}
+              onClick={() => navigate(`/manga/${mangaId}?src=${sourceId}`)}
               className="text-foreground"
               aria-label="Go back"
             >

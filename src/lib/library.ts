@@ -1,7 +1,7 @@
-import type { MangaSearchResult } from "./mangadex";
+import type { MangaResult } from "./types";
 
 export interface LibraryEntry {
-  manga: MangaSearchResult;
+  manga: MangaResult;
   addedAt: number;
   lastReadChapter: string;
   lastReadAt: number;
@@ -30,7 +30,7 @@ export function saveLibrary(library: LibraryEntry[]) {
   localStorage.setItem(LIBRARY_KEY, JSON.stringify(library));
 }
 
-export function addToLibrary(manga: MangaSearchResult) {
+export function addToLibrary(manga: MangaResult) {
   const lib = getLibrary();
   if (lib.find((e) => e.manga.id === manga.id)) return;
   lib.push({

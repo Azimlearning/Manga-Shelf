@@ -12,7 +12,7 @@ import {
   type LibraryEntry,
   type ReadingSettings,
 } from "@/lib/library";
-import type { MangaSearchResult } from "@/lib/mangadex";
+import type { MangaResult } from "@/lib/types";
 
 export function useLibrary() {
   const [library, setLibrary] = useState<LibraryEntry[]>(getLibrary);
@@ -23,7 +23,7 @@ export function useLibrary() {
     setTick((t) => t + 1);
   }, []);
 
-  const add = useCallback((manga: MangaSearchResult) => {
+  const add = useCallback((manga: MangaResult) => {
     addToLibrary(manga);
     refresh();
   }, [refresh]);

@@ -1,6 +1,6 @@
-import { useParams, useNavigate } from "react-router-dom";
+import { useParams, useNavigate, useSearchParams } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
-import { getMangaDetail, getMangaChapters } from "@/lib/mangadex";
+import { getSource } from "@/lib/sources";
 import { useLibrary } from "@/hooks/use-library";
 import {
   ArrowLeft,
@@ -23,7 +23,7 @@ import { getChapterPages } from "@/lib/mangadex";
 
 // ─── Chapter download button ───────────────────────────────────────────────
 
-function ChapterDownloadButton({ chapterId }: { chapterId: string }) {
+function ChapterDownloadButton({ chapterId, sourceId }: { chapterId: string, sourceId: string }) {
   const [status, setStatus] = useState<"idle" | "downloading" | "done">(() =>
     isChapterDownloaded(chapterId) ? "done" : "idle"
   );
@@ -35,7 +35,8 @@ function ChapterDownloadButton({ chapterId }: { chapterId: string }) {
       if (status !== "idle") return;
       setStatus("downloading");
       try {
-        const pages = await getChapterPages(chapterId);
+        const source = getSource(sourceId);
+        const pages = await source.getPages(chapterId);
         await downloadChapter(chapterId, pages, (done, total) =>
           setProgress({ done, total })
         );
@@ -90,27 +91,30 @@ function ChapterDownloadButton({ chapterId }: { chapterId: string }) {
 export default function MangaDetailPage() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
+  const sourceId = searchParams.get("src") || "mangadex";
+  const source = getSource(sourceId);
   const { add, remove, inLibrary, chapterRead, toggleRead } = useLibrary();
   const [sortAsc, setSortAsc] = useState(false);
 
   const { data: manga, isLoading } = useQuery({
-    queryKey: ["manga-detail", id],
-    queryFn: () => getMangaDetail(id!),
+    queryKey: ["manga-detail", sourceId, id],
+    queryFn: () => source.getDetail(id!),
     enabled: !!id,
   });
 
   const { data: chapters, isLoading: loadingChapters } = useQuery({
-    queryKey: ["manga-chapters", id],
-    queryFn: () => getMangaChapters(id!),
+    queryKey: ["manga-chapters", sourceId, id],
+    queryFn: () => source.getChapters(id!),
     enabled: !!id,
   });
 
   const saved = id ? inLibrary(id) : false;
 
-  const sortedChapters = chapters?.data
-    ? [...chapters.data].sort((a, b) => {
-        const an = parseFloat(a.chapter) || 0;
-        const bn = parseFloat(b.chapter) || 0;
+  const sortedChapters = chapters
+    ? [...chapters].sort((a, b) => {
+        const an = parseFloat(a.number) || 0;
+        const bn = parseFloat(b.number) || 0;
         return sortAsc ? an - bn : bn - an;
       })
     : [];
@@ -165,8 +169,11 @@ export default function MangaDetailPage() {
 
             <div className="flex flex-col justify-end gap-1.5 pb-1">
               <h1 className="text-lg font-bold leading-tight text-foreground">{manga.title}</h1>
-              <p className="text-xs text-muted-foreground">{manga.author}</p>
+              <p className="text-xs text-muted-foreground">{manga.authors?.[0] || manga.description}</p>
               <div className="flex flex-wrap gap-1">
+                <span className="rounded-md bg-secondary px-2 py-0.5 text-[10px] font-medium text-secondary-foreground">
+                  {source.name}
+                </span>
                 <span className="rounded-md bg-primary/15 px-2 py-0.5 text-[10px] font-medium text-primary capitalize">
                   {manga.status}
                 </span>
@@ -219,7 +226,7 @@ export default function MangaDetailPage() {
       <div className="mt-6 px-4">
         <div className="mb-3 flex items-center justify-between">
           <h2 className="text-sm font-semibold text-foreground">
-            Chapters {chapters ? `(${chapters.total})` : ""}
+            Chapters {chapters ? `(${chapters.length})` : ""}
           </h2>
           <button
             id="detail-sort-btn"
@@ -250,7 +257,7 @@ export default function MangaDetailPage() {
                 >
                   <button
                     id={`chapter-btn-${ch.id}`}
-                    onClick={() => navigate(`/read/${manga.id}/${ch.id}`)}
+                    onClick={() => navigate(`/read/${manga.id}/${ch.id}?src=${sourceId}`)}
                     className="flex flex-1 flex-col gap-0.5 text-left"
                   >
                     <span
@@ -258,17 +265,17 @@ export default function MangaDetailPage() {
                         read ? "text-muted-foreground" : "text-foreground"
                       }`}
                     >
-                      Ch. {ch.chapter}
+                      Ch. {ch.number}
                       {ch.title ? ` — ${ch.title}` : ""}
                     </span>
                     <span className="text-[10px] text-muted-foreground">
-                      {ch.scanlationGroup} ·{" "}
-                      {new Date(ch.publishAt).toLocaleDateString()}
+                      {ch.groupName} ·{" "}
+                      {new Date(ch.date).toLocaleDateString()}
                     </span>
                   </button>
 
                   {/* Per-chapter download button */}
-                  <ChapterDownloadButton chapterId={ch.id} />
+                  <ChapterDownloadButton chapterId={ch.id} sourceId={sourceId} />
 
                   <button
                     id={`read-toggle-${ch.id}`}

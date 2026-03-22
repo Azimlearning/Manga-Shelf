@@ -1,6 +1,7 @@
 import type { Source, MangaResult, MangaDetail, Chapter } from "@/lib/types";
 import * as mangadex from "./mangadex";
 import * as mangaplus from "./mangaplus";
+import * as comick from "./comick";
 
 // ─── MangaDex source ──────────────────────────────────────────────────────
 const mangadexSource: Source = {
@@ -37,8 +38,22 @@ const mangaplusSource: Source = {
   healthCheck: () => mangaplus.healthCheck(),
 };
 
+// ─── Comick source ─────────────────────────────────────────────────────────
+const comickSource: Source = {
+  id: "comick",
+  name: "Comick",
+  language: "en",
+  search: (query: string, page: number): Promise<MangaResult[]> =>
+    comick.searchManga(query, page),
+  getPopular: (): Promise<MangaResult[]> => comick.getPopular(),
+  getDetail: (id: string): Promise<MangaDetail> => comick.getMangaDetail(id),
+  getChapters: (mangaId: string): Promise<Chapter[]> => comick.getChapterList(mangaId),
+  getPages: (chapterId: string): Promise<string[]> => comick.getChapterPages(chapterId),
+  healthCheck: () => comick.healthCheck(),
+};
+
 // ─── Registry ─────────────────────────────────────────────────────────────
-export const allSources: Source[] = [mangadexSource, mangaplusSource];
+export const allSources: Source[] = [mangadexSource, mangaplusSource, comickSource];
 
 export function getSource(id: string): Source {
   const src = allSources.find((s) => s.id === id);

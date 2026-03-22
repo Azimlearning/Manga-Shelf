@@ -23,7 +23,7 @@ function openDB(): Promise<IDBDatabase> {
   });
 }
 
-function idbPut(db: IDBDatabase, key: string, value: Blob): Promise<void> {
+function idbPut(db: IDBDatabase, key: string, value: ArrayBuffer): Promise<void> {
   return new Promise((resolve, reject) => {
     const tx = db.transaction(STORE_NAME, "readwrite");
     tx.objectStore(STORE_NAME).put(value, key);
@@ -32,7 +32,7 @@ function idbPut(db: IDBDatabase, key: string, value: Blob): Promise<void> {
   });
 }
 
-function idbGet(db: IDBDatabase, key: string): Promise<Blob | undefined> {
+function idbGet(db: IDBDatabase, key: string): Promise<ArrayBuffer | undefined> {
   return new Promise((resolve, reject) => {
     const tx = db.transaction(STORE_NAME, "readonly");
     const req = tx.objectStore(STORE_NAME).get(key);
@@ -89,8 +89,8 @@ export async function downloadChapter(
     // Fetch page as Blob via the proxy
     const res = await fetch(pages[i]);
     if (!res.ok) throw new Error(`Failed to fetch page ${i}: ${res.status}`);
-    const blob = await res.blob();
-    await idbPut(db, key, blob);
+    const buffer = await res.arrayBuffer();
+    await idbPut(db, key, buffer);
     done++;
     onProgress?.(done, pages.length);
   }
@@ -115,8 +115,9 @@ export async function getDownloadedChapter(chapterId: string): Promise<string[] 
 
   for (let i = 0; i < info.pageCount; i++) {
     const key = `chapter_${chapterId}_page_${i}`;
-    const blob = await idbGet(db, key);
-    if (!blob) return null; // incomplete download — treat as not downloaded
+    const buffer = await idbGet(db, key);
+    if (!buffer) return null; // incomplete download — treat as not downloaded
+    const blob = new Blob([buffer], { type: 'image/jpeg' });
     urls.push(URL.createObjectURL(blob));
   }
 
