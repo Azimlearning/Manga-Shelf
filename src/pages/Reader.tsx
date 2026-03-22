@@ -2,9 +2,22 @@ import { useParams, useNavigate } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
 import { getChapterPages } from "@/lib/mangadex";
 import { useLibrary, useReadingSettings } from "@/hooks/use-library";
-import { ArrowLeft, ChevronLeft, ChevronRight, Settings2 } from "lucide-react";
+import {
+  ArrowLeft,
+  ChevronLeft,
+  ChevronRight,
+  Settings2,
+  Download,
+  CheckCircle2,
+  Loader2,
+} from "lucide-react";
 import { useState, useEffect, useRef, useCallback } from "react";
 import { motion, AnimatePresence } from "framer-motion";
+import {
+  isChapterDownloaded,
+  downloadChapter,
+  getDownloadedChapter,
+} from "@/lib/offline";
 
 const BG_CLASSES: Record<string, string> = {
   dark: "bg-[hsl(225,15%,5%)]",
@@ -15,25 +28,66 @@ const BG_CLASSES: Record<string, string> = {
 export default function ReaderPage() {
   const { mangaId, chapterId } = useParams<{ mangaId: string; chapterId: string }>();
   const navigate = useNavigate();
-  const { markRead, settings } = useReaderState(mangaId!, chapterId!);
+  const { markRead: mark, settings } = useReaderState(mangaId!, chapterId!);
   const [showUI, setShowUI] = useState(true);
   const [showSettings, setShowSettings] = useState(false);
   const [currentPage, setCurrentPage] = useState(0);
 
-  const { data: pages, isLoading } = useQuery({
+  // ── Download state ───────────────────────────────────────────────────────
+  const [downloaded, setDownloaded] = useState(() =>
+    isChapterDownloaded(chapterId!)
+  );
+  const [downloading, setDownloading] = useState(false);
+  const [dlProgress, setDlProgress] = useState<{ done: number; total: number } | null>(null);
+
+  const { data: remotePages, isLoading: loadingRemote } = useQuery({
     queryKey: ["chapter-pages", chapterId],
     queryFn: () => getChapterPages(chapterId!),
-    enabled: !!chapterId,
+    enabled: !!chapterId && !downloaded,
   });
 
-  // Mark as read when 80% through
+  // Use local blobs if downloaded, otherwise remote pages
+  const [localPages, setLocalPages] = useState<string[] | null>(null);
+
   useEffect(() => {
-    if (!pages) return;
+    if (!downloaded || !chapterId) return;
+    getDownloadedChapter(chapterId).then((urls) => {
+      if (urls) setLocalPages(urls);
+      else setDownloaded(false); // incomplete download
+    });
+  }, [downloaded, chapterId]);
+
+  const pages = localPages ?? remotePages ?? [];
+  const isLoading = downloaded ? localPages === null : loadingRemote;
+
+  // ── Mark read when 80% through ──────────────────────────────────────────
+  useEffect(() => {
+    if (!pages.length) return;
     const threshold = Math.floor(pages.length * 0.8);
     if (currentPage >= threshold) {
-      markRead();
+      mark();
     }
-  }, [currentPage, pages, markRead]);
+  }, [currentPage, pages, mark]);
+
+  // ── Handle download ──────────────────────────────────────────────────────
+  const handleDownload = async () => {
+    if (downloading || downloaded || !remotePages?.length) return;
+    setDownloading(true);
+    setDlProgress({ done: 0, total: remotePages.length });
+    try {
+      await downloadChapter(chapterId!, remotePages, (done, total) => {
+        setDlProgress({ done, total });
+      });
+      setDownloaded(true);
+      const urls = await getDownloadedChapter(chapterId!);
+      if (urls) setLocalPages(urls);
+    } catch (err) {
+      console.error("Download failed:", err);
+    } finally {
+      setDownloading(false);
+      setDlProgress(null);
+    }
+  };
 
   const bgClass = BG_CLASSES[settings.readerBackground] || BG_CLASSES.dark;
 
@@ -45,7 +99,7 @@ export default function ReaderPage() {
     );
   }
 
-  if (!pages) return null;
+  if (!pages.length) return null;
 
   return (
     <div className={`relative min-h-screen ${bgClass}`}>
@@ -58,13 +112,48 @@ export default function ReaderPage() {
             exit={{ y: -50, opacity: 0 }}
             className="fixed inset-x-0 top-0 z-50 flex items-center gap-3 bg-background/80 px-4 py-3 backdrop-blur-lg"
           >
-            <button onClick={() => navigate(`/manga/${mangaId}`)} className="text-foreground">
+            <button
+              id="reader-back-btn"
+              onClick={() => navigate(`/manga/${mangaId}`)}
+              className="text-foreground"
+              aria-label="Go back"
+            >
               <ArrowLeft size={20} />
             </button>
             <div className="flex-1 truncate text-sm font-medium text-foreground">
               {currentPage + 1} / {pages.length}
             </div>
-            <button onClick={() => setShowSettings(!showSettings)} className="text-foreground">
+
+            {/* Download button */}
+            <button
+              id="reader-download-btn"
+              onClick={handleDownload}
+              disabled={downloading || downloaded}
+              className="flex items-center gap-1.5 text-foreground disabled:opacity-60"
+              aria-label={downloaded ? "Chapter downloaded" : "Download chapter"}
+            >
+              {downloaded ? (
+                <CheckCircle2 size={18} className="text-primary" />
+              ) : downloading ? (
+                <>
+                  <Loader2 size={18} className="animate-spin" />
+                  {dlProgress && (
+                    <span className="text-xs text-muted-foreground">
+                      {dlProgress.done}/{dlProgress.total}
+                    </span>
+                  )}
+                </>
+              ) : (
+                <Download size={18} />
+              )}
+            </button>
+
+            <button
+              id="reader-settings-btn"
+              onClick={() => setShowSettings(!showSettings)}
+              className="text-foreground"
+              aria-label="Reader settings"
+            >
               <Settings2 size={18} />
             </button>
           </motion.header>
@@ -107,7 +196,15 @@ function useReaderState(mangaId: string, chapterId: string) {
   return { markRead, settings, updateSettings: update };
 }
 
-function VerticalReader({ pages, onTap, onPageChange }: { pages: string[]; onTap: () => void; onPageChange: (p: number) => void }) {
+function VerticalReader({
+  pages,
+  onTap,
+  onPageChange,
+}: {
+  pages: string[];
+  onTap: () => void;
+  onPageChange: (p: number) => void;
+}) {
   const containerRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -131,7 +228,7 @@ function VerticalReader({ pages, onTap, onPageChange }: { pages: string[]; onTap
   }, [pages, onPageChange]);
 
   return (
-    <div ref={containerRef} className="hide-scrollbar" onClick={onTap}>
+    <div ref={containerRef} className="hide-scrollbar pt-14" onClick={onTap}>
       {pages.map((url, i) => (
         <div key={i} data-page={i} className="flex items-center justify-center">
           <img
@@ -177,7 +274,7 @@ function HorizontalReader({
   };
 
   return (
-    <div className="flex min-h-screen items-center justify-center" onClick={handleClick}>
+    <div className="flex min-h-screen items-center justify-center pt-14" onClick={handleClick}>
       <AnimatePresence mode="wait">
         <motion.img
           key={currentPage}
@@ -191,11 +288,27 @@ function HorizontalReader({
         />
       </AnimatePresence>
 
-      {/* Page dots */}
+      {/* Page controls */}
       <div className="fixed inset-x-0 bottom-4 flex items-center justify-center gap-1 px-4">
-        <button onClick={goPrev} className="p-1 text-foreground/50"><ChevronLeft size={16} /></button>
-        <span className="text-xs text-foreground/50">{currentPage + 1} / {pages.length}</span>
-        <button onClick={goNext} className="p-1 text-foreground/50"><ChevronRight size={16} /></button>
+        <button
+          id="reader-prev-btn"
+          onClick={goPrev}
+          className="p-1 text-foreground/50"
+          aria-label="Previous page"
+        >
+          <ChevronLeft size={16} />
+        </button>
+        <span className="text-xs text-foreground/50">
+          {currentPage + 1} / {pages.length}
+        </span>
+        <button
+          id="reader-next-btn"
+          onClick={goNext}
+          className="p-1 text-foreground/50"
+          aria-label="Next page"
+        >
+          <ChevronRight size={16} />
+        </button>
       </div>
     </div>
   );
@@ -219,9 +332,12 @@ function ReaderSettingsPanel() {
             {(["vertical", "horizontal"] as const).map((mode) => (
               <button
                 key={mode}
+                id={`reader-mode-${mode}`}
                 onClick={() => update({ readingMode: mode })}
                 className={`flex-1 rounded-lg py-2 text-xs font-medium capitalize transition-colors ${
-                  settings.readingMode === mode ? "bg-primary text-primary-foreground" : "bg-secondary text-secondary-foreground"
+                  settings.readingMode === mode
+                    ? "bg-primary text-primary-foreground"
+                    : "bg-secondary text-secondary-foreground"
                 }`}
               >
                 {mode}
@@ -230,17 +346,22 @@ function ReaderSettingsPanel() {
           </div>
         </div>
 
-        {/* Direction (only for horizontal) */}
+        {/* Direction */}
         {settings.readingMode === "horizontal" && (
           <div>
-            <p className="mb-2 text-xs font-medium text-muted-foreground uppercase">Direction</p>
+            <p className="mb-2 text-xs font-medium text-muted-foreground uppercase">
+              Direction
+            </p>
             <div className="flex gap-2">
               {(["rtl", "ltr"] as const).map((dir) => (
                 <button
                   key={dir}
+                  id={`reader-dir-${dir}`}
                   onClick={() => update({ readingDirection: dir })}
                   className={`flex-1 rounded-lg py-2 text-xs font-medium uppercase transition-colors ${
-                    settings.readingDirection === dir ? "bg-primary text-primary-foreground" : "bg-secondary text-secondary-foreground"
+                    settings.readingDirection === dir
+                      ? "bg-primary text-primary-foreground"
+                      : "bg-secondary text-secondary-foreground"
                   }`}
                 >
                   {dir}
@@ -252,14 +373,19 @@ function ReaderSettingsPanel() {
 
         {/* Background */}
         <div>
-          <p className="mb-2 text-xs font-medium text-muted-foreground uppercase">Background</p>
+          <p className="mb-2 text-xs font-medium text-muted-foreground uppercase">
+            Background
+          </p>
           <div className="flex gap-2">
             {(["dark", "light", "sepia"] as const).map((bg) => (
               <button
                 key={bg}
+                id={`reader-bg-${bg}`}
                 onClick={() => update({ readerBackground: bg })}
                 className={`flex-1 rounded-lg py-2 text-xs font-medium capitalize transition-colors ${
-                  settings.readerBackground === bg ? "bg-primary text-primary-foreground" : "bg-secondary text-secondary-foreground"
+                  settings.readerBackground === bg
+                    ? "bg-primary text-primary-foreground"
+                    : "bg-secondary text-secondary-foreground"
                 }`}
               >
                 {bg}

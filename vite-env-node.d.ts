@@ -1,0 +1,2 @@
+declare module "@vitejs/plugin-react-swc";
+declare module "lovable-tagger";
