@@ -1,14 +1,8 @@
 import type { MangaResult, Chapter, MangaDetail } from "@/lib/types";
 
-// All calls proxied through Vite dev-server → /api/mangadex → https://api.mangadex.org
-const API = "/api/mangadex";
+// Call MangaDex API directly — it supports CORS from browsers
+const API = "https://api.mangadex.org";
 const SOURCE_ID = "mangadex";
-
-/** Proxy any upstream image URL through our local image proxy */
-function proxyImg(url: string): string {
-  if (!url) return "";
-  return `/api/proxy-image?url=${encodeURIComponent(url)}`;
-}
 
 // ─── Helpers ──────────────────────────────────────────────────────────────
 
@@ -25,8 +19,8 @@ function extractDescription(attrs: any): string {
 function extractCoverUrl(manga: any): string {
   const rel = manga.relationships?.find((r: any) => r.type === "cover_art");
   if (rel?.attributes?.fileName) {
-    const raw = `https://uploads.mangadex.org/covers/${manga.id}/${rel.attributes.fileName}.256.jpg`;
-    return proxyImg(raw);
+    // MangaDex CDN supports CORS — no proxy needed
+    return `https://uploads.mangadex.org/covers/${manga.id}/${rel.attributes.fileName}.256.jpg`;
   }
   return "";
 }
@@ -75,7 +69,6 @@ export async function getPopular(): Promise<MangaResult[]> {
   params.append("includes[]", "cover_art");
   params.append("contentRating[]", "safe");
   params.append("contentRating[]", "suggestive");
-  // Use availableTranslatedLanguage[] for the /manga list endpoint (not translatedLanguage[])
   params.append("availableTranslatedLanguage[]", "en");
 
   const res = await fetch(`${API}/manga?${params}`);
@@ -134,5 +127,6 @@ export async function getChapterPages(chapterId: string): Promise<string[]> {
   const hash: string = json.chapter.hash;
   const pages: string[] = json.chapter.data;
 
-  return pages.map((p) => proxyImg(`${baseUrl}/data/${hash}/${p}`));
+  // MangaDex at-home image servers support CORS
+  return pages.map((p) => `${baseUrl}/data/${hash}/${p}`);
 }
