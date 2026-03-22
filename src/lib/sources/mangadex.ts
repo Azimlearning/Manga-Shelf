@@ -1,10 +1,20 @@
 import type { MangaResult, Chapter, MangaDetail } from "@/lib/types";
 
-// Call MangaDex API directly — it supports CORS from browsers
-const API = "https://api.mangadex.org";
+// All requests go through /api/mangadex proxy (Vercel serverless function)
 const SOURCE_ID = "mangadex";
 
 // ─── Helpers ──────────────────────────────────────────────────────────────
+
+function proxyApi(path: string, params: URLSearchParams): string {
+  const p = new URLSearchParams(params);
+  p.set("path", path);
+  return `/api/mangadex?${p}`;
+}
+
+function proxyImage(url: string): string {
+  if (!url) return "";
+  return `/api/proxy-image?url=${encodeURIComponent(url)}`;
+}
 
 function extractTitle(attrs: any): string {
   const t = attrs?.title ?? {};
@@ -19,8 +29,8 @@ function extractDescription(attrs: any): string {
 function extractCoverUrl(manga: any): string {
   const rel = manga.relationships?.find((r: any) => r.type === "cover_art");
   if (rel?.attributes?.fileName) {
-    // MangaDex CDN supports CORS — no proxy needed
-    return `https://uploads.mangadex.org/covers/${manga.id}/${rel.attributes.fileName}.256.jpg`;
+    const raw = `https://uploads.mangadex.org/covers/${manga.id}/${rel.attributes.fileName}.256.jpg`;
+    return proxyImage(raw);
   }
   return "";
 }
@@ -56,7 +66,7 @@ export async function searchManga(query: string, page = 0): Promise<MangaResult[
   params.append("contentRating[]", "suggestive");
   params.append("availableTranslatedLanguage[]", "en");
 
-  const res = await fetch(`${API}/manga?${params}`);
+  const res = await fetch(proxyApi("manga", params));
   const json = await res.json();
   return (json.data ?? []).map(mapManga);
 }
@@ -71,7 +81,7 @@ export async function getPopular(): Promise<MangaResult[]> {
   params.append("contentRating[]", "suggestive");
   params.append("availableTranslatedLanguage[]", "en");
 
-  const res = await fetch(`${API}/manga?${params}`);
+  const res = await fetch(proxyApi("manga", params));
   const json = await res.json();
   return (json.data ?? []).map(mapManga);
 }
@@ -81,7 +91,7 @@ export async function getMangaDetail(id: string): Promise<MangaDetail> {
   params.append("includes[]", "cover_art");
   params.append("includes[]", "author");
 
-  const res = await fetch(`${API}/manga/${id}?${params}`);
+  const res = await fetch(proxyApi(`manga/${id}`, params));
   const json = await res.json();
   const m = json.data;
 
@@ -102,7 +112,7 @@ export async function getChapterList(mangaId: string): Promise<Chapter[]> {
   params.append("translatedLanguage[]", "en");
   params.append("includes[]", "scanlation_group");
 
-  const res = await fetch(`${API}/manga/${mangaId}/feed?${params}`);
+  const res = await fetch(proxyApi(`manga/${mangaId}/feed`, params));
   const json = await res.json();
 
   return (json.data ?? []).map((c: any) => ({
@@ -120,13 +130,13 @@ export async function getChapterList(mangaId: string): Promise<Chapter[]> {
 }
 
 export async function getChapterPages(chapterId: string): Promise<string[]> {
-  const res = await fetch(`${API}/at-home/server/${chapterId}`);
+  const res = await fetch(proxyApi(`at-home/server/${chapterId}`, new URLSearchParams()));
   const json = await res.json();
 
   const baseUrl: string = json.baseUrl;
   const hash: string = json.chapter.hash;
   const pages: string[] = json.chapter.data;
 
-  // MangaDex at-home image servers support CORS
-  return pages.map((p) => `${baseUrl}/data/${hash}/${p}`);
+  // Proxy all page images through our serverless function
+  return pages.map((p) => proxyImage(`${baseUrl}/data/${hash}/${p}`));
 }
