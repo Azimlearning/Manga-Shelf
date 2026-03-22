@@ -1,5 +1,7 @@
 {
   "rewrites": [
+    { "source": "/api/mangadex", "destination": "/api/mangadex" },
+    { "source": "/api/proxy-image", "destination": "/api/proxy-image" },
     { "source": "/(.*)", "destination": "/index.html" }
   ]
 }
