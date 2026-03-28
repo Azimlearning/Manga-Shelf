@@ -2,6 +2,9 @@ import type { Source, MangaResult, MangaDetail, Chapter } from "@/lib/types";
 import * as mangadex from "./mangadex";
 import * as mangaplus from "./mangaplus";
 import * as comick from "./comick";
+import * as batoto from "./batoto";
+import * as mangakakalot from "./mangakakalot";
+import * as mangareader from "./mangareader";
 
 // ─── MangaDex source ──────────────────────────────────────────────────────
 const mangadexSource: Source = {
@@ -38,7 +41,7 @@ const mangaplusSource: Source = {
   healthCheck: () => mangaplus.healthCheck(),
 };
 
-// ─── Comick source ─────────────────────────────────────────────────────────
+// ─── Comick source ────────────────────────────────────────────────────────
 const comickSource: Source = {
   id: "comick",
   name: "Comick",
@@ -52,8 +55,57 @@ const comickSource: Source = {
   healthCheck: () => comick.healthCheck(),
 };
 
+// ─── Bato.to source ───────────────────────────────────────────────────────
+const batotoSource: Source = {
+  id: "batoto",
+  name: "Bato.to",
+  language: "en",
+  search: (query: string, page: number): Promise<MangaResult[]> =>
+    batoto.searchManga(query, page),
+  getPopular: (): Promise<MangaResult[]> => batoto.getPopular(),
+  getDetail: (id: string): Promise<MangaDetail> => batoto.getMangaDetail(id),
+  getChapters: (mangaId: string): Promise<Chapter[]> => batoto.getChapterList(mangaId),
+  getPages: (chapterId: string): Promise<string[]> => batoto.getChapterPages(chapterId),
+  healthCheck: () => batoto.healthCheck(),
+};
+
+// ─── Mangakakalot source ──────────────────────────────────────────────────
+const mangakakalotSource: Source = {
+  id: "mangakakalot",
+  name: "Mangakakalot",
+  language: "en",
+  search: (query: string, page: number): Promise<MangaResult[]> =>
+    mangakakalot.searchManga(query, page),
+  getPopular: (): Promise<MangaResult[]> => mangakakalot.getPopular(),
+  getDetail: (id: string): Promise<MangaDetail> => mangakakalot.getMangaDetail(id),
+  getChapters: (mangaId: string): Promise<Chapter[]> => mangakakalot.getChapterList(mangaId),
+  getPages: (chapterId: string): Promise<string[]> => mangakakalot.getChapterPages(chapterId),
+  healthCheck: () => mangakakalot.healthCheck(),
+};
+
+// ─── MangaReader source ───────────────────────────────────────────────────
+const mangareaderSource: Source = {
+  id: "mangareader",
+  name: "MangaReader",
+  language: "en",
+  search: (query: string, page: number): Promise<MangaResult[]> =>
+    mangareader.searchManga(query, page),
+  getPopular: (): Promise<MangaResult[]> => mangareader.getPopular(),
+  getDetail: (id: string): Promise<MangaDetail> => mangareader.getMangaDetail(id),
+  getChapters: (mangaId: string): Promise<Chapter[]> => mangareader.getChapterList(mangaId),
+  getPages: (chapterId: string): Promise<string[]> => mangareader.getChapterPages(chapterId),
+  healthCheck: () => mangareader.healthCheck(),
+};
+
 // ─── Registry ─────────────────────────────────────────────────────────────
-export const allSources: Source[] = [mangadexSource, mangaplusSource, comickSource];
+export const allSources: Source[] = [
+  mangadexSource,
+  comickSource,
+  batotoSource,
+  mangakakalotSource,
+  mangareaderSource,
+  mangaplusSource,
+];
 
 export function getSource(id: string): Source {
   const src = allSources.find((s) => s.id === id);
@@ -61,7 +113,7 @@ export function getSource(id: string): Source {
   return src;
 }
 
-// Re-exported for backward compat — Browse page now uses allSources + health checks
+// Re-exported for backward compat
 export const sources = allSources;
 export const disabledSources: { id: string; name: string; reason: string }[] = [];
 

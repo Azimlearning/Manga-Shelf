@@ -67,6 +67,7 @@ export async function searchManga(query: string, page = 0): Promise<MangaResult[
   params.append("includes[]", "cover_art");
   params.append("contentRating[]", "safe");
   params.append("contentRating[]", "suggestive");
+  params.append("contentRating[]", "erotica");
   params.append("availableTranslatedLanguage[]", "en");
 
   const res = await fetch(proxyApi("manga", params));
@@ -82,6 +83,7 @@ export async function getPopular(): Promise<MangaResult[]> {
   params.append("includes[]", "cover_art");
   params.append("contentRating[]", "safe");
   params.append("contentRating[]", "suggestive");
+  params.append("contentRating[]", "erotica");
   params.append("availableTranslatedLanguage[]", "en");
 
   const res = await fetch(proxyApi("manga", params));
@@ -108,28 +110,41 @@ export async function getMangaDetail(id: string): Promise<MangaDetail> {
 }
 
 export async function getChapterList(mangaId: string): Promise<Chapter[]> {
-  const params = new URLSearchParams({
-    limit: "500",
-    "order[chapter]": "desc",
-  });
-  params.append("translatedLanguage[]", "en");
-  params.append("includes[]", "scanlation_group");
+  const all: Chapter[] = [];
+  let offset = 0;
+  const limit = 500;
 
-  const res = await fetch(proxyApi(`manga/${mangaId}/feed`, params));
-  const json = await res.json();
+  while (true) {
+    const params = new URLSearchParams({
+      limit: String(limit),
+      offset: String(offset),
+      "order[chapter]": "desc",
+    });
+    params.append("translatedLanguage[]", "en");
+    params.append("includes[]", "scanlation_group");
 
-  return (json.data ?? []).map((c: any) => ({
-    id: c.id,
-    mangaId,
-    number: c.attributes?.chapter ?? "?",
-    title: c.attributes?.title ?? "",
-    date: c.attributes?.publishAt ?? "",
-    groupName:
-      c.relationships?.find((r: any) => r.type === "scanlation_group")?.attributes?.name ??
-      "Unknown",
-    isRead: false,
-    isDownloaded: false,
-  }));
+    const res = await fetch(proxyApi(`manga/${mangaId}/feed`, params));
+    const json = await res.json();
+    const batch: any[] = json.data ?? [];
+
+    all.push(...batch.map((c: any) => ({
+      id: c.id,
+      mangaId,
+      number: c.attributes?.chapter ?? "?",
+      title: c.attributes?.title ?? "",
+      date: c.attributes?.publishAt ?? "",
+      groupName:
+        c.relationships?.find((r: any) => r.type === "scanlation_group")?.attributes?.name ??
+        "Unknown",
+      isRead: false,
+      isDownloaded: false,
+    })));
+
+    if (batch.length < limit) break;
+    offset += limit;
+  }
+
+  return all;
 }
 
 export async function getChapterPages(chapterId: string): Promise<string[]> {
