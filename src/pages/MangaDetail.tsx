@@ -19,7 +19,6 @@ import {
   downloadChapter,
   getDownloadedChapter,
 } from "@/lib/offline";
-import { getChapterPages } from "@/lib/mangadex";
 
 // ─── Chapter download button ───────────────────────────────────────────────
 
@@ -257,7 +256,7 @@ export default function MangaDetailPage() {
                 >
                   <button
                     id={`chapter-btn-${ch.id}`}
-                    onClick={() => navigate(`/read/${manga.id}/${ch.id}?src=${sourceId}`)}
+                    onClick={() => navigate(`/read/${manga.id}/${ch.id}?src=${sourceId}&ch=${encodeURIComponent(ch.number)}`)}
                     className="flex flex-1 flex-col gap-0.5 text-left"
                   >
                     <span

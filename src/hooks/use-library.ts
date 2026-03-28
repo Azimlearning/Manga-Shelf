@@ -12,6 +12,12 @@ import {
   type LibraryEntry,
   type ReadingSettings,
 } from "@/lib/library";
+import {
+  getEnhancedLibrary,
+  setMangaStatus,
+  type EnhancedLibraryEntry,
+  type ReadingStatus,
+} from "@/lib/library-enhanced";
 import type { MangaResult } from "@/lib/types";
 
 export function useLibrary() {
@@ -62,4 +68,21 @@ export function useReadingSettings() {
   }, []);
 
   return { settings, update };
+}
+
+export function useEnhancedLibrary() {
+  const [entries, setEntries] = useState<EnhancedLibraryEntry[]>(getEnhancedLibrary);
+  const [, setTick] = useState(0);
+
+  const refresh = useCallback(() => {
+    setEntries(getEnhancedLibrary());
+    setTick((t) => t + 1);
+  }, []);
+
+  const setStatus = useCallback((mangaId: string, status: ReadingStatus) => {
+    setMangaStatus(mangaId, status);
+    refresh();
+  }, [refresh]);
+
+  return { entries, setStatus, refresh };
 }

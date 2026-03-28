@@ -151,3 +151,21 @@ export async function deleteDownloadedChapter(chapterId: string): Promise<void> 
 export function getDownloadedChapterIds(): string[] {
   return Object.keys(getMetadata());
 }
+
+/** Get the count of downloaded chapters */
+export function getDownloadedChapterCount(): number {
+  return Object.keys(getMetadata()).length;
+}
+
+/** Delete all downloaded chapters from IndexedDB and clear metadata. */
+export async function clearAllDownloads(): Promise<void> {
+  const db = await openDB();
+  await new Promise<void>((resolve, reject) => {
+    const tx = db.transaction(STORE_NAME, "readwrite");
+    tx.objectStore(STORE_NAME).clear();
+    tx.oncomplete = () => resolve();
+    tx.onerror = () => reject(tx.error);
+  });
+  localStorage.removeItem(METADATA_KEY);
+  _db = null; // reset cached DB handle so next open starts fresh
+}

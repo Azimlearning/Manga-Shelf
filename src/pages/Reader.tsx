@@ -2,6 +2,8 @@ import { useParams, useNavigate, useSearchParams } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
 import { getSource } from "@/lib/sources";
 import { useLibrary, useReadingSettings } from "@/hooks/use-library";
+import { recordReadingSession } from "@/lib/library-enhanced";
+import { getLibrary } from "@/lib/library";
 import {
   ArrowLeft,
   ChevronLeft,
@@ -30,8 +32,9 @@ export default function ReaderPage() {
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
   const sourceId = searchParams.get("src") || "mangadex";
+  const chapterNum = searchParams.get("ch") || "";
   const source = getSource(sourceId);
-  const { markRead: mark, settings } = useReaderState(mangaId!, chapterId!);
+  const { markRead: mark, settings } = useReaderState(mangaId!, chapterId!, chapterNum, sourceId);
   const [showUI, setShowUI] = useState(true);
   const [showSettings, setShowSettings] = useState(false);
   const [currentPage, setCurrentPage] = useState(0);
@@ -188,13 +191,24 @@ export default function ReaderPage() {
   );
 }
 
-function useReaderState(mangaId: string, chapterId: string) {
+function useReaderState(mangaId: string, chapterId: string, chapterNum: string, sourceId: string) {
   const { markRead: mark } = useLibrary();
   const { settings, update } = useReadingSettings();
 
   const markRead = useCallback(() => {
-    mark(mangaId, chapterId, "");
-  }, [mangaId, chapterId, mark]);
+    mark(mangaId, chapterId, chapterNum);
+    const library = getLibrary();
+    const entry = library.find((e) => e.manga.id === mangaId);
+    recordReadingSession({
+      mangaId,
+      mangaTitle: entry?.manga.title ?? "",
+      coverUrl: entry?.manga.coverUrl ?? "",
+      chapterId,
+      chapterNum,
+      sourceId,
+      readAt: Date.now(),
+    });
+  }, [mangaId, chapterId, chapterNum, sourceId, mark]);
 
   return { markRead, settings, updateSettings: update };
 }
