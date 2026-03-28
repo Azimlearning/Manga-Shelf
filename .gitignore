@@ -22,3 +22,7 @@ dist-ssr
 *.njsproj
 *.sln
 *.sw?
+
+# Project specific exclusions
+.claude/
+Manga-Shelf Comprehensive Improvements (1).md
